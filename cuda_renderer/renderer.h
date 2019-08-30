@@ -61,6 +61,7 @@ public:
         float3 v0;
         float3 v1;
         float3 v2;
+        int3 color;
 
         friend std::ostream& operator<<(std::ostream& os, const Triangle& dt)
         {
@@ -117,14 +118,14 @@ public:
             assert(R.type() == CV_32F);
             assert(t.type() == CV_32F);
 
-            a0 = R.at<float>(0, 0); a1 = R.at<float>(0, 1);
-            a2 = R.at<float>(0, 2); a3 = t.at<float>(0, 0);
+            a0 = R.at<float>(0, 0)*100; a1 = R.at<float>(0, 1)*100;
+            a2 = R.at<float>(0, 2)*100; a3 = t.at<float>(0, 0);
 
-            b0 = R.at<float>(1, 0); b1 = R.at<float>(1, 1);
-            b2 = R.at<float>(1, 2); b3 = t.at<float>(1, 0);
+            b0 = R.at<float>(1, 0)*100; b1 = R.at<float>(1, 1)*100;
+            b2 = R.at<float>(1, 2)*100; b3 = t.at<float>(1, 0);
 
-            c0 = R.at<float>(2, 0); c1 = R.at<float>(2, 1);
-            c2 = R.at<float>(2, 2); c3 = t.at<float>(2, 0);
+            c0 = R.at<float>(2, 0)*100; c1 = R.at<float>(2, 1)*100;
+            c2 = R.at<float>(2, 2)*100; c3 = t.at<float>(2, 0);
 
             d0 = 0; d1 = 0;
             d2 = 0; d3 = 1;
@@ -294,6 +295,7 @@ Model::Triangle transform_triangle(const Model::Triangle& dev_tri, const Model::
         mat_mul_v(tran, (dev_tri.v0)),
         mat_mul_v(tran, (dev_tri.v1)),
         mat_mul_v(tran, (dev_tri.v2)),
+        dev_tri.color
     };
 }
 

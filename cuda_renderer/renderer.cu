@@ -81,7 +81,8 @@ struct max2zero_functor{
 
 __device__
 void rasterization(const Model::Triangle dev_tri, Model::float3 last_row,
-                                        int32_t* depth_entry, size_t width, size_t height, const Model::ROI roi){
+                                        int32_t* depth_entry, size_t width, size_t height,
+                                        const Model::ROI roi, int32_t* color_entry){
     // refer to tiny renderer
     // https://github.com/ssloy/tinyrenderer/blob/master/our_gl.cpp
     float pts2[3][2];
@@ -137,8 +138,15 @@ void rasterization(const Model::Triangle dev_tri, Model::float3 last_row,
 
             int32_t depth = int32_t(frag_depth/**1000*/ + 0.5f);
             int32_t& depth_to_write = depth_entry[x_to_write+y_to_write*real_width];
-
-            atomicMin(&depth_to_write, depth);
+            int32_t& color_to_write = color_entry[x_to_write+y_to_write*real_width];
+            int32_t rgb = dev_tri.color.v0;
+            rgb = (rgb << 8) + dev_tri.color.v1;
+            rgb = (rgb << 8) + dev_tri.color.v2;
+            if(color_entry[x_to_write+y_to_write*real_width] > depth){
+                depth_entry[x_to_write+y_to_write*real_width] = rgb;
+            }
+            // atomicMin(&depth_to_write, rgb);
+            atomicMin(&color_to_write,depth);
         }
     }
 }
@@ -146,7 +154,7 @@ void rasterization(const Model::Triangle dev_tri, Model::float3 last_row,
 __global__ void render_triangle(Model::Triangle* device_tris_ptr, size_t device_tris_size,
                                 Model::mat4x4* device_poses_ptr, size_t device_poses_size,
                                 int32_t* depth_image_vec, size_t width, size_t height, const Model::mat4x4 proj_mat,
-                                 const Model::ROI roi){
+                                 const Model::ROI roi,int32_t* color_image_vec){
     size_t pose_i = blockIdx.y;
     size_t tri_i = blockIdx.x*blockDim.x + threadIdx.x;
 
@@ -161,6 +169,7 @@ __global__ void render_triangle(Model::Triangle* device_tris_ptr, size_t device_
     }
 
     int32_t* depth_entry = depth_image_vec + pose_i*real_width*real_height; //length: width*height 32bits int
+    int32_t* color_entry = color_image_vec + pose_i*real_width*real_height;
     Model::mat4x4* pose_entry = device_poses_ptr + pose_i; // length: 16 32bits float
     Model::Triangle* tri_entry = device_tris_ptr + tri_i; // length: 9 32bits float
 
@@ -177,14 +186,14 @@ __global__ void render_triangle(Model::Triangle* device_tris_ptr, size_t device_
     // projection transform
     local_tri = transform_triangle(local_tri, proj_mat);
 
-    rasterization(local_tri, last_row, depth_entry, width, height, roi);
+    rasterization(local_tri, last_row, depth_entry, width, height, roi,color_entry);
 }
 
 std::vector<int32_t> render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
                             size_t width, size_t height, const Model::mat4x4& proj_mat, const Model::ROI roi){
 
     const size_t threadsPerBlock = 256;
-
+    std::cout <<tris[0].color.v1;
     thrust::device_vector<Model::Triangle> device_tris = tris;
     thrust::device_vector<Model::mat4x4> device_poses = poses;
 
@@ -198,15 +207,17 @@ std::vector<int32_t> render_cuda(const std::vector<Model::Triangle>& tris,const 
     }
     // atomic min only support int32
     thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+    thrust::device_vector<int32_t> device_color_int(poses.size()*real_width*real_height, INT_MAX);
     {
         Model::Triangle* device_tris_ptr = thrust::raw_pointer_cast(device_tris.data());
         Model::mat4x4* device_poses_ptr = thrust::raw_pointer_cast(device_poses.data());
         int32_t* depth_image_vec = thrust::raw_pointer_cast(device_depth_int.data());
+        int32_t* color_image_vec = thrust::raw_pointer_cast(device_color_int.data());
 
         dim3 numBlocks((tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
         render_triangle<<<numBlocks, threadsPerBlock>>>(device_tris_ptr, tris.size(),
                                                         device_poses_ptr, poses.size(),
-                                                        depth_image_vec, width, height, proj_mat, roi);
+                                                        depth_image_vec, width, height, proj_mat, roi,color_image_vec);
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
     }
@@ -216,6 +227,7 @@ std::vector<int32_t> render_cuda(const std::vector<Model::Triangle>& tris,const 
         thrust::transform(device_depth_int.begin(), device_depth_int.end(),
                           device_depth_int.begin(), max2zero_functor());
         thrust::copy(device_depth_int.begin(), device_depth_int.end(), result_depth.begin());
+
     }
 
     return result_depth;
@@ -238,14 +250,15 @@ std::vector<int32_t> render_cuda(device_vector_holder<Model::Triangle>& device_t
     }
     // atomic min only support int32
     thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+    thrust::device_vector<int32_t> device_color_int(poses.size()*real_width*real_height, INT_MAX);
     {
         Model::mat4x4* device_poses_ptr = thrust::raw_pointer_cast(device_poses.data());
         int32_t* depth_image_vec = thrust::raw_pointer_cast(device_depth_int.data());
-
+        int32_t* color_image_vec = thrust::raw_pointer_cast(device_color_int.data());
         dim3 numBlocks((device_tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
         render_triangle<<<numBlocks, threadsPerBlock>>>(device_tris.data(), device_tris.size(),
                                                         device_poses_ptr, poses.size(),
-                                                        depth_image_vec, width, height, proj_mat, roi);
+                                                        depth_image_vec, width, height, proj_mat, roi,color_image_vec);
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
     }
@@ -277,15 +290,16 @@ device_vector_holder<int> render_cuda_keep_in_gpu(const std::vector<Model::Trian
     // atomic min only support int32
 //    thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
     device_vector_holder<int> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+    device_vector_holder<int> device_color_int(poses.size()*real_width*real_height, INT_MAX);
     {
         Model::Triangle* device_tris_ptr = thrust::raw_pointer_cast(device_tris.data());
         Model::mat4x4* device_poses_ptr = thrust::raw_pointer_cast(device_poses.data());
         int32_t* depth_image_vec = device_depth_int.data();
-
+        int32_t* color_image_vec = device_color_int.data();
         dim3 numBlocks((tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
         render_triangle<<<numBlocks, threadsPerBlock>>>(device_tris_ptr, tris.size(),
                                                         device_poses_ptr, poses.size(),
-                                                        depth_image_vec, width, height, proj_mat, roi);
+                                                        depth_image_vec, width, height, proj_mat, roi,color_image_vec);
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
     }
@@ -311,14 +325,15 @@ device_vector_holder<int> render_cuda_keep_in_gpu(device_vector_holder<Model::Tr
     // atomic min only support int32
 //    thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
     device_vector_holder<int> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+    device_vector_holder<int> device_color_int(poses.size()*real_width*real_height, INT_MAX);
     {
         Model::mat4x4* device_poses_ptr = thrust::raw_pointer_cast(device_poses.data());
         int32_t* depth_image_vec = device_depth_int.data();
-
+        int32_t* color_image_vec = device_color_int.data();
         dim3 numBlocks((tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
         render_triangle<<<numBlocks, threadsPerBlock>>>(tris.data(), tris.size(),
                                                         device_poses_ptr, poses.size(),
-                                                        depth_image_vec, width, height, proj_mat, roi);
+                                                        depth_image_vec, width, height, proj_mat, roi,color_image_vec);
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
     }

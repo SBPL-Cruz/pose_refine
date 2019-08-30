@@ -81,7 +81,32 @@ void cuda_renderer::Model::recursive_render(const aiScene *sc, const aiNode *nd,
             tri_temp.v0 = mat_mul_vec(m, mesh->mVertices[face->mIndices[0]]);
             tri_temp.v1 = mat_mul_vec(m, mesh->mVertices[face->mIndices[1]]);
             tri_temp.v2 = mat_mul_vec(m, mesh->mVertices[face->mIndices[2]]);
+            aiColor4D color = mesh->mColors[0][face->mIndices[0]];
+            int r = round(color.r*255);
+            int g = round(color.g*255);
+            int b = round(color.b*255);
+            tri_temp.color.v0 = r;
+            tri_temp.color.v1 = g;
+            tri_temp.color.v2 = b;
 
+            // aiColor4D color1 = mesh->mColors[0][face->mIndices[1]];
+            // aiColor4D color2 = mesh->mColors[0][face->mIndices[2]];
+            // float r = color.r;
+            // float r1 = color1.r;
+            // float r2 = color2.r;
+            // int ri = round(r*255);
+            // int ri1 = round(r1*255);
+            // int ri2 = round(r2*255);
+            // if(n==0 && t==0){
+            //     std::cout<< tri_temp.color << std::endl;
+            //     int red = (tri_temp.color >> 16) & 0xFF;
+            //     int green = (tri_temp.color >> 8) & 0xFF;
+            //     int blue = tri_temp.color & 0xFF;
+            //     std::cout<< red << std::endl;
+            //     std::cout<< green << std::endl;
+            //     std::cout<< blue << std::endl;
+                
+            // }
             tris.push_back(tri_temp);
 
             int3 face_temp;

@@ -12,7 +12,7 @@ SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g2 -ggdb")
 SET(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 if(USE_CUDA)
-set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-10.0)
+set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-9.0)
 add_definitions(-DCUDA_ON)
 endif()
 
@@ -52,5 +52,5 @@ add_library(pose_refine ${pose_refine_srcs})
 target_include_directories(pose_refine PUBLIC ${pose_refine_inc})
 target_link_libraries(pose_refine PUBLIC ${pose_refine_lib})
 
-add_executable(pose_refine_test test.cpp)
-target_link_libraries(pose_refine_test pose_refine)
+#add_executable(pose_refine_test test.cpp)
+#target_link_libraries(pose_refine_test pose_refine)
